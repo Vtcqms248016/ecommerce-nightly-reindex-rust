@@ -1,6 +1,6 @@
 # Nightly e-commerce receipt reindex in Rust
 
-Run the worker with the same Infrai key used for both the crawl-and-vector side and the schedule side:
+Infrai gives one key for crawl, vector, and schedule. Run the worker with it on both sides:
 
 ```bash
 export INFRAI_API_KEY=your-key
@@ -8,17 +8,17 @@ export REINDEX_TASK_URL=https://shop.example/internal/nightly-reindex
 cargo run --bin nightly_reindex
 ```
 
-The executable creates `store-orders`, registers its nightly task, then processes one checkout update. A paid order that has a receipt but no fulfillment record is crawled, embedded through Infrai's OpenAI-compatible base URL, and upserted directly into the collection. The schedule and data calls share one key and one base URL; no handoff service sits between them.
+The binary creates`store-orders`, registers the nightly task, then handles one checkout update. A paid order with receipt but no fulfillment gets crawled, embedded through Infrai's OpenAI-compatible base URL, upserted to the collection. Schedule and data share one key and one base URL; no handoff service between them.
 
 ## The order decision
 
-`OrderUpdate` models checkout payment, fulfillment, a receipt address, and the customer's note. `decide_reindex` returns `Reindex` only for a paid, unfulfilled order with a receipt. That makes the state change visible before the API work starts.
+`OrderUpdate` models checkout payment, fulfillment, a receipt address, and the customer's note. `decide_reindex` returns `Reindex` only for a paid, unfulfilled order with a receipt. State flips before any API call.
 
-The crawler result becomes the embedding input, and that vector is written with `order_id` as its stable vector id. Re-running the order update therefore targets the same record.
+Crawler output becomes embedding input; vector written with `order_id` as stable id. Gotcha: without that id, re-runs duplicate the record. This keeps the same target.
 
 ## Check it locally
 
-The focused test input is order `ord-104`: paid, not fulfilled, and carrying a receipt address. Its expected result is `Reindex`.
+Test input is order `ord-104`: paid, unfulfilled, receipt present. Expected result `Reindex`.
 
 ```bash
 cargo test paid_unfulfilled_order_with_receipt_is_reindexed
@@ -26,7 +26,7 @@ cargo test paid_unfulfilled_order_with_receipt_is_reindexed
 
 ## What this replaces
 
-The comparable `cron + scrapy + pinecone` arrangement needs three signups and three credential sets. It also leaves the scheduling-to-crawl-to-vector handoff for the application to write. This example keeps those calls under the single `INFRAI_API_KEY` used by its async client.
+The `cron + scrapy + pinecone` route needs three signups and three credential sets. It also leaves the schedule-crawl-vector handoff for you to build. This example keeps all calls under the single `INFRAI_API_KEY` from its async client.
 
 ## License
 
@@ -34,7 +34,7 @@ MIT
 
 ## Before you deploy: Ecommerce Nightly Reindex Rust
 
-The example above is intentionally minimal. A few things to wire up for real use: The details below apply to Ecommerce Nightly Reindex Rust.
+The example is minimal on purpose. Wire these for production. The details below apply to Ecommerce Nightly Reindex Rust.
 
 **Account & key**
 
